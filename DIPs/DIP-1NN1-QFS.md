@@ -218,15 +218,15 @@ For static indexing to work in type contexts,
 the grammar of the D Programming Language must be amended by the following clauses:
 
 ```diff
-    IdentifierList:
+    QualifiedIdentifier:
         Identifier
-        Identifier . IdentifierList
+        Identifier . QualifiedIdentifier
         TemplateInstance
-        TemplateInstance . IdentifierList
+        TemplateInstance . QualifiedIdentifier
         Identifier [ AssignExpression ]
-        Identifier [ AssignExpression ] . IdentifierList
+        Identifier [ AssignExpression ] . QualifiedIdentifier
 +       Identifier [ AssignExpression .. AssignExpression ]
-+       Identifier [ AssignExpression .. AssignExpression ] . IdentifierList
++       Identifier [ AssignExpression .. AssignExpression ] . QualifiedIdentifier
 ```
 
 In the current form of the grammar, in a type context, slicing expressions can only occur as the last part of a type (or somwehere inside).
@@ -354,7 +354,7 @@ it can be an alias of anything with the members necessary for static indexing.
 
 For the `...` token be accepted in type contexts, the grammar must be amended:
 ```diff
-    BasicType2X:
+    TypeSuffix:
         *
         [ ]
         [ AssignExpression ]
