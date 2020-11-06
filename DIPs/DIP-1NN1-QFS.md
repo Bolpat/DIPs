@@ -563,7 +563,7 @@ since the conversion may be destructive and/or change the size of the object.
 
 ```D
 import sophisticated.tuple : Tuple;
-import sophisticated.tratis : CommonType;
+import sophisticated.traits : CommonType;
 import pack.a : A;
 import pack.b : B;
 import pack.c : C;
