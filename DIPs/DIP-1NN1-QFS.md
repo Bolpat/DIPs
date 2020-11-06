@@ -833,7 +833,7 @@ An illustration of such a case is this:
 ```D
 struct Example
 {
-    int opIndex(size_t i = 0)(size_t[] xs...) { return i; }
+    int opIndex(size_t i = 0)(size_t = 2) { return i; }
 }
 ```
 Let `example` be of type `Example` and given the expression `example[1]`,
@@ -842,7 +842,7 @@ but if the rewrite `example.opIndex!1()` were tried first,
 it succeeds and returns `1`.
 
 While this example is somewhat artificial,
-it still demonstrates that breakage and silent change of meaning is possible in less fringe code.
+it still demonstrates that breakage and silent change of meaning might be possible.
 
 ### Compile-time Function Parameters
 
