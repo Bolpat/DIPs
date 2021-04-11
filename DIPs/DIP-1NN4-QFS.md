@@ -13,9 +13,9 @@
 Functions that have function pointers or delegates as parameters cannot be integrated well in
 `pure`, `nothrow`, `@safe`, and `@nogc` code.
 This DIP proposes to adjust the constraints that the mentioned attributes impose.
-It will only affect aforementioned functions
-with function pointers or delegates as `const`, `inout`, or `immutable` parameters.
-The goal is to recognize more code as valid that factually behaves in accordance to the attributes.
+It will only affect functions which accept
+function pointers or delegates as `const`, `inout`, or `immutable` parameters.
+The goal is to recognize more code as valid that factually behaves in accordance with the attributes.
 
 ## Contents
 
@@ -50,15 +50,15 @@ The goal is to recognize more code as valid that factually behaves in accordance
 
 The attributes `pure`, `nothrow`, `@safe`, and `@nogc` will be called *warrant attributes* in this DIP.
 Notably absent are `throw` (cf. [DIP&nbsp;1029](https://github.com/dlang/DIPs/blob/master/DIPs/accepted/DIP1029.md)),
-`@system` and `@trusted` as they do not warrant any compiler-side checks.
-Also absent is [`@live`](https://dlang.org/spec/ob.html) because `@live` functions may call non-`@live` functions.
+`@system`, and `@trusted` as they do not warrant any compiler-side checks.
+Also absent is [`@live`](https://dlang.org/spec/ob.html), because `@live` functions may call non-`@live` functions.
 
 In this document, *FP/D (type)* will be an abbreviation for *function pointer (type) or delegate (type)*.
 A type is *essentially an FP/D type* (called *eFP/D* for short) if it is
-* a possibly qualified version of an FP/D type — or
-* a possibly qualified pointer to essentially FP/D type — or
-* a possibly qualified slice of essentially FP/D type — or
-* a possibly qualified static array of essentially FP/D type — or
+* a possibly qualified version of an FP/D type; or
+* a possibly qualified pointer to essentially FP/D type; or
+* a possibly qualified slice of essentially FP/D type; or
+* a possibly qualified static array of essentially FP/D type; or
 * a possibly qualified associative array with value type an essentially FP/D type.
 
 > **Example**<br/>The type `void function(int) pure` is an FP/D type, and<br/>
@@ -74,7 +74,7 @@ In case of:
 > **Example**<br/>Let `fpps` be of the essential FP/D type in the previous example.
 > For `i` a `size_t` and `arg` an `int`, `(*(fpps[i]))(arg)` is an essential call to `fpps`.
 
-Basically, an essential call consists of minimal efforts to get to an underlying FP/D object and call it. 
+Basically, an essential call consists of minimal efforts to obtain and call to an underlying FP/D object. 
 
 This document makes use of the terms *parameter* and *argument* in a very precise manner
 as the [D Language Specification](https://dlang.org/spec/function.html#param-storage) points out:
@@ -84,9 +84,9 @@ as the [D Language Specification](https://dlang.org/spec/function.html#param-sto
 A *higher-order function*, or *functional* for short, is anything that can be called
 with one or more eFP/D objects as arguments.
 
-When a higher-order function is called, there are four notable entities to commonly refer to:
+When a higher-order function is called, there are four notable entities commonly referred to:
 * The *context function,* or *context* for short, is the function that contains the call expresion.
-  When the document refers to e.g. a `@safe` context,
+  When the document refers to e.g., a `@safe` context,
   it is meant that the context function is annotated or could be annotated `@safe`.
 * The *functional* is the higher-order function that is called.
 * The *parameter functions* are the variables declared by the functional's parameter list.
@@ -120,7 +120,7 @@ but is considered invalid because the formal conditions of the warrant attribute
 
 First note that warrant attributes on a functional (or, in fact, on any function) and on a functional's parameter
 mean very different things:
-* On a functional, they give rise to a *guarantee* it makes that contexts may rely upon.
+* On a functional, they give rise to a *guarantee* that contexts may rely upon.
 * Only on a functional's parameter type, warrant attributes give rise to a *requirement*
   that the functional potentially *needs* to work properly.
 
@@ -129,21 +129,21 @@ In its internal logic, the functional might make use of memoization, or the fact
 [unique](https://dlang.org/spec/const3.html#implicit_qualifier_conversions).
 In the case of uniqueness, omitting the requirement will result in invalid code,
 since return values of impure functions generally cannot be assumed unique.
-In the case of memoization, omitting the requirement will not result in a compile error,
-but unexpected behavior, when used improperly.
-In most cases, however, the requirement is merely there to match the functionals own guarantees.
+In the case of memoization, omitting the requirement will result not in a compile error
+but in unexpected behavior when used improperly.
+In most cases, however, the requirement is merely there to match the functional's own guarantees.
 
 In the current state of the language,
 a functional cannot have strong guarantees and weak requirements at the same time.
 Having strong guarantees means
-that the functional provably behaves in accordance to warrant attributes,
+that the functional provably behaves in accordance with warrant attributes
 so that it can be annotated with them.
 Having weak requirements means
 that the functional does not need the guarantees of a warrant attribute on a parameter function
 for its internal logic to be sound.
-When pressed, most library authors opt *against* warrant attributes, i.e. *for* weak requirements,
+When pressed, most library authors opt *against* warrant attributes, i.e., *for* weak requirements,
 and therefore needlessly weaken the guarantees.
-For example, Phobos' [lockstep](https://dlang.org/library/std/range/lockstep.html) does that.
+For example, Phobos's [lockstep](https://dlang.org/library/std/range/lockstep.html) does that.
 
 The DIP solves this problem by always allowing calls to `const` (or `inout` or `immutable`) parameter functions
 when checking a functional for satisfying the conditions of a warrant attribute,
@@ -152,7 +152,7 @@ In a context where a functional is called, the type system has all the necessary
 if the execution of it will comply with the warrant attributes of the context.
 For that it must take the warrant attributes of the arguments' types into account.
 
-Loosening warrant attributes' restrictions in that way, allows more first-order functions to be annotated.
+Loosening warrant attributes' restrictions in that way allows the annotation of more first-order functions.
 An illustration of what this DIP enables is this:
 ```D
 interface NogcToString
@@ -180,25 +180,25 @@ class Aggregate
 ```
 
 The signature of the interface's `toString` indicates that the class override may require the sink to be `@nogc`
-in order to fulfill its guarantee to not allocate.
+in order to fulfill its guarantee not to allocate.
 
-Notice how, in the override, `sink` is not annotated `@safe` or `@nogc`, but it is declared `const`.
+Notice how, in the override, `sink` is not annotated `@safe` or `@nogc` but is declared `const`.
 The key observation of this DIP is
-that because it is `const`, any call like `sink("bla")` can only execute the delegate passed to it
-(`sink` cannot e.g. be reassigned),
-and thus, the parameterless `toString` function has full control about whether the argument `&append`
+that because it is `const`, any call like `sink("bla")` is restricted to only executing the delegate passed to it
+(`sink` cannot e.g., be reassigned),
+and thus the parameterless `toString` function has full control over whether the argument `&append`
 binding to `sink` is `@safe` and/or `@nogc`.
 
 Apart from the statement `toString(&append)`, the parameterless `toString` is `@safe`. 
-By the proposed changes, the statement will be recognized `@safe` on the grounds that
-* the called `toString` function is annotated (or inferred) `@safe` — and
+With the proposed changes, the statement will be recognized `@safe` on the grounds that
+* the called `toString` function is annotated (or inferred) `@safe`; and
 * the type of the argument `&append` binding to a `const` parameter is also (annotated or) inferred `@safe`.
-  (Note that it is the actual argument that is checked, not the type of the parameter it binds to.
+  (Note that the actual argument is checked, not the type of the parameter to which it binds.
   That argument must satisfy the conditions posed by the parameter type, but it can have stronger guarantees.
   In the sense of the proposal, it is these additional guarantees that matter.)
 
 On the other hand, that statement is (still) not recognized `@nogc` on the grounds that,
-while the called `toString` function is annotated (or inferred) `@nogc`,
+though the called `toString` function is annotated (or inferred) `@nogc`,
 the type of the argument `&append` binding to a `const` parameter is not annotated or inferred  `@nogc`.
 
 Similarly, the statement is not recognized `pure`
@@ -214,17 +214,17 @@ This is, however, less of a problem than it seems at first glance:
   The memory safety audit for the context must include the callback anyway. 
 * Consider a `@safe` context calling a `@safe` functional with a `@system` argument.
   This becomes invalid, since a `@safe` functional makes guarantees for its internal logic.
-  What the `@system` callback does, is among the responsibility of the context,
+  What the `@system` callback does is among the responsibility of the context,
   and in a `@safe` context, calling a `@system` function is invalid.
   Note that this is only true if the callback binds to a `const` parameter;
-  if the parameter is mutable, there is no difference to the current state of the language.
+  if the parameter is mutable, there is no difference with the current state of the language.
 
 Especially in meta-programming, it might not be clear at all whether a callback's type has a warrant attribute or not.
 For `@safe` and `@nogc`,
 this is mostly unproblematic, since these are only interesting from a safety or resource perspective,
 but no program's logic depends on the guarantees these attributes make:
-A memory-unsafe program is broken in itself and
-GC allocating may at worst slow down a program unexpectedly due to the GC issuing a collection cycle.
+A memory-unsafe program is broken in itself, and
+GC allocations may at worst slow down a program unexpectedly due to the GC issuing a collection cycle.
 When GC allocations are an issue, profiling will be necessary anyway.
 [Author's note: I'm not completely sure. Please have a think whether these claims are really true.]
 
@@ -244,7 +244,7 @@ This is especially true for meta-programming (function templates etc.), but not 
 Usually, this can be achieved by properly annotating the callback where it is defined:
 Instead of `x => x + 1` one has to write `(x) pure nothrow => x + 1`.
 When the type of the argument bound to `x` depends on factors outside the control of the context,
-e.g. if `typeof(x)` happens to have an impure or possibly throwing `opBinary!"+"(int)`,
+e.g., if `typeof(x)` happens to have an impure or possibly throwing `opBinary!"+"(int)`,
 that will lead to a compilation error where the lambda is formulated.
 
 Even in the current state of the language,
@@ -253,14 +253,14 @@ but instead must make those requirements explicit in its statements:
 Because functionals can be overloaded on the parameter types' warrant attributes,
 that implicit check cannot be relied upon in general.
 
-The benefits and drawbacks of making this or another warrant attribute the default,
+The benefits and drawbacks of making this or another warrant attribute the default
 are discussed regularly on the forums.
 Changes akin to the ones proposed by this DIP are in fact *necessary*
-to alleviate breakage by any sane way such a default would be implemented.
+to alleviate breakage by any sane way that such a default would be implemented.
 
 For example, consider making `@safe` the default.
 Without this change, a suitable unannotated `void functional(void function() f)` would either become
-* `void functional(void function()       f) @safe` — or
+* `void functional(void function()       f) @safe`; or
 * `void functional(void function() @safe f) @safe`.
 
 (Here, *suitable* means that `functional` contains `@safe` operations only, apart from calls to `f`.
@@ -288,7 +288,7 @@ Higher-order functions are not an obscure fringe case that can be ignored.
 With this DIP, the first option together with qualifying the parameter `const` is a transition path
 for most functionals.
 If the functional assigns the parameter, a local variable must be introduced instead.
-If the parameter is not taken directly, but e.g. in a slice (see [Description](#description)),
+If the parameter is not taken directly, but e.g., in a slice (see [Description](#description)),
 assignment cannot be replaced by a local variable.
 This, however, can be dismissed as being an obscure fringe case that can be ignored.
 
@@ -309,7 +309,7 @@ For that reason, functionals written in C++ in principle have the same problem.
 However, C++ does not require that `noexcept` functions only call `noexcept` functions.
 It is up to the programmer to ensure that no called function, including function pointer parameters,
 factually will not throw at runtime.
-(If they do, `std::unecpected` is called which usually aborts the program.)
+(If they do, `std::unexpected` is called which usually aborts the program.)
 In plain terms, C++ follows the route that it is the programmer's responsibility nothing bad happens.
 
 Such a solution is undesirable.
@@ -386,7 +386,7 @@ When specific properties of a callback are expected, the programmer should state
 * A fourth option is using a function template `ensurePureCall!pureFunctional` that forwards the call
   and also supplies the `pure` context to raise an error if the arguments make the call impure.
 * A fifth option is wrapping the part in a `pure` pseudo-block
-  (i.e. a lambda that is immediately called)
+  (i.e., a lambda that is immediately called)
   the same way `@trusted` pseudo-blocks are used
   (however, with the reversed intention to restrict and not to allow operations).
 
@@ -408,11 +408,11 @@ no matter whether the proposed changes are implemented.
 ## Description
 
 The changes proposed by this DIP affect
-* when warrant attributes are satisfied by functions annotated with them,
+* when warrant attributes are satisfied by functions annotated with them; and
 * how warrant attributes are inferred for function templates.
 
 The first bullet point can be split into:
-* when warrant attributes are satisfied by functionals themselves, and
+* when warrant attributes are satisfied by functionals themselves; and
 * when warrant attributes are satisfied when calling a functional.
 
 These changes require unexpected secondary changes to method overriding consistent with expectations.
@@ -430,15 +430,15 @@ that are annotated with the same attribute or have it inferred.
 Exceptions to this are statements in `debug` blocks and that `@safe` functions may also call `@trusted` functions.
 
 This DIP proposes that
-1. essential calls of `const`, `inout`, or `immutable` eFP/D type parameters are not to be subjected to this condition,
-   — as well as
+1. essential calls of `const`, `inout`, or `immutable` eFP/D type parameters are not to be subjected to this condition;
+   as well as
 2. essential calls of local `const`, `inout`, or `immutable` eFP/D type variables declared in a functional,
    that are initialized by dereferencing and/or indexing an eFP/D parameter or another such local variable,
    become valid, too.
 
 For associative arrays, `in` expressions returning a pointer to a value count as indexing,
 as well as binding values in a `foreach` loop does.
-However, value access through its [methods](https://dlang.org/spec/hash-map.html#properties) (e.g. `byValue`)
+However, value access through its [methods](https://dlang.org/spec/hash-map.html#properties) (e.g., `byValue`)
 are not proposed to be special cased.
 
 This DIP author suggests that
@@ -478,8 +478,8 @@ must be distinguished from a qualifier on the second level of indirection.
 ### Attribute Inference for Functional Templates
 
 By the proposal of this DIP, when inferring attributes for function templates,
-1. essential calls of runtime parameters of a `const`, `inout`, or `immutable` eFP/D type,
-   — as well as
+1. essential calls of runtime parameters of a `const`, `inout`, or `immutable` eFP/D type;
+   as well as
 2. essential calls of local `const`, `inout`, or `immutable` eFP/D type variables declared in the function template,
    that are initialized by dereferencing and/or indexing an eFP/D runtime parameter or another such local variable
 
@@ -494,7 +494,7 @@ When calling a functional, the types of the eFP/D arguments are known.
 By the proposal of this DIP,
 in a warrant attribute context, a call to a functional is valid with respect to the warrant attribute
 if, and only if,
-1. the functional is annotated (possibly implicitly or inferred) with that warrant attribute (current state) — and
+1. the functional is annotated (possibly implicitly or inferred) with that warrant attribute (current state); and
 2. the types of all arguments that bind to `const`, `inout`, or `immutable` eFP/D type parameters
    are annotated (possibly implicitly or inferred) with that warrant attribute.
 
@@ -623,7 +623,7 @@ based on what the range interfaces of the supplied ranges can guarantee.
 (This is the best it can theoretically do.)
 In the aforementioned case, `opApply` will be inferred `@safe`.
 Whether a call to `opApply` is valid in a `@safe` context is determined in the context,
-i.e. the code that contains the `foreach` loop,
+i.e., the code that contains the `foreach` loop,
 depending on whether the argument, the generated delegate, is `@safe`.
 
 For how to implement `SimpleLockstep` in a way that properly takes attributes into account
@@ -914,7 +914,7 @@ as `lunctional` demonstrates.
 ### Third-order and Even-Higher-Order Functionals
 
 All the functionals presented in illustrations and examples were of second order,
-i.e. the FP/D types in functionals' parameter lists themselves took no eFP/Ds as parameters.
+i.e., the FP/D types in functionals' parameter lists themselves took no eFP/Ds as parameters.
 
 The easiest example of a non-trivial third-order functional is this:
 ```D
@@ -1056,7 +1056,7 @@ In meta-programming, one tends to care little about attributes, since they are i
 unless of course the details of one becomes part of the function's logic.
 
 If the functional in question is part of an interface or otherwise part of an inheritance hierarchy,
-templates cannot (easily) be customized, e.g. by overriding them.
+templates cannot (easily) be customized, e.g., by overriding them.
 
 ### New Attributes
 
@@ -1089,7 +1089,7 @@ However, since `const` is not involved, the parameter can be reassigned with a `
 Unless the parameter is `ref`, a local variable serves the job equally well,
 since the assignment is internal to the functional and cannot be observed by the context. 
 
-When it comes to eFP/D types with at least one layer of indirection, e.g. `int delegate()[]`
+When it comes to eFP/D types with at least one layer of indirection, e.g., `int delegate()[]`
 –&nbsp;any weak clones alternative would have to address them&nbsp;–
 mutability affects the context:
 the functional may assign elements of the slice, affecting the context doing so:
@@ -1175,7 +1175,7 @@ Other storage classes make no sense in combination with `lazy`, as the implied `
 or they cannot become part of the delegate type in a meaningful way.
 
 Type constructors and `ref` are redundant with the `in` storage class, except `shared`.
-Because the implicitly generated delegate is always thread-local, i.e. never a `shared` object,
+Because the implicitly generated delegate is always thread-local, i.e., never a `shared` object,
 `shared` cannot be meaningfully applied to the delegate.
 Also, there is no way to supply a `shared` delegate without circumventing the type system
 because the delegate is always created implicitly.
