@@ -57,7 +57,7 @@ When a postponed or abandoned DIP is revived, the DIP manager will consult with 
 
 A DIP's author may choose to withdraw the DIP from the review process at any time. If the DIP is the subject of an ongoing round of review, the DIP manager will announce the termination of the review round and add to the DIP a summary of the review to date. The DIP manager will mark the DIP as Withdrawn and no further action will be taken. Withdrawn DIPs are _not_ frozen at the current stage of the DIP process. The process is completely terminated.
 
-Unlike Abandoned DIPs, a Withdrawn DIP cannot be revived without the DIP manager's approval. A DIP author will have a specific reason for withdrawing from the process, and that reason might preclude further consideration of the DIP. For example, a DIP that was withdrawn because it received an overwhelmingly negative response would better to be rewritten and submitted as a new proposal rather than revived in its original form. If the DIP manager does allow a Withdrawn DIP to be revived, it must begin the review process anew from the first round of Community Review.
+Unlike Abandoned DIPs, a Withdrawn DIP cannot be revived without the DIP manager's approval. A DIP author will have a specific reason for withdrawing from the process, and that reason might preclude further consideration of the DIP. For example, a DIP that was withdrawn because it received an overwhelmingly negative response should be rewritten and submitted as a new proposal rather than revived in its original form. If the DIP manager does allow a Withdrawn DIP to be revived, it must begin the review process anew from the first round of Community Review.
 
 A DIP's status may be set to `Superseded` at any stage in the DIP process to indicate that the proposal was made obsolete, e.g. by the acceptance of an alternative proposal, the implementation of a feature similar to that proposed by the DIP, etc. Superseded DIPs may not be revived without the consent of the language maintainers.
 
@@ -70,7 +70,7 @@ The following steps outline the process for the best-case scenario after a DIP i
 * after Final Review, no revisions are required and no other DIP is under active consideration, so the DIP may immediately move into Formal Assessment.
 * the language maintainers have enough information to render a verdict on the DIP within 30 days.
 
-So in the best-case scenario, a DIP will require two - three months to go from Community Review to acceptance or rejection. The DIP manager will strive to keep the process as short as possible, but it should be expected that the best-case scenario will be rare and a period of four or five months will be more common.
+So in the best-case scenario, a DIP will require two to three months to go from Community Review to acceptance or rejection. The DIP manager will strive to keep the process as short as possible, but it should be expected that the best-case scenario will be rare and a period of four or five months will be more common.
 
 [DIP Repository]: https://github.com/dlang/DIPs
 [D Forums]: https://forum.dlang.org/
