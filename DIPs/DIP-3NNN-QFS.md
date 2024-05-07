@@ -382,13 +382,13 @@ where they do not evaluate the second argument if the first one already determin
 | `null`         | `true`          | `null`             |
 | `true`         | *rhs*           | *rhs*              |
 
-| *lhs*          | *rhs*           | *lhs* `||?` *rhs*  | 
+| *lhs*          | *rhs*           | *lhs* `||?` *rhs*  |
 |:--------------:|:---------------:|:------------------:|
-| `false`        | *rhs*           | *rhs*              | 
-| `null`         | `false`         | `null`             | 
-| `null`         | `null`          | `null`             | 
-| `null`         | `true`          | `true`             | 
-| `true`         | *unevaluated*   | `true`             | 
+| `false`        | *rhs*           | *rhs*              |
+| `null`         | `false`         | `null`             |
+| `null`         | `null`          | `null`             |
+| `null`         | `true`          | `true`             |
+| `true`         | *unevaluated*   | `true`             |
 
 Likewise, there are `&?` and `|?` added that have the same results,
 but evaluate the second argument in every case.
