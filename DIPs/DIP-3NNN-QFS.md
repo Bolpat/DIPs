@@ -136,11 +136,11 @@ function pointer types `R function(…) …`,
 deletate types `R delegate(…) …`,
 and associative array types `T[K]`
 we re-interpret them as plus types:
-* `C` is a shorthand for `C‼ + typeof(null)`,
-* `T*` is a shorthand for `T*‼ + typeof(null)`,
-* `R function(…) …` is a shorthand for `R function‼(…) … + typeof(null)`,
-* `R delegate(…) …` is a shorthand for `R delegate‼(…) … + typeof(null)`,
-* `T[K]` is a shorthand for `T[K]‼ + typeof(null)`,
+* `C` is a shorthand for `C‼?` aka. `C‼ + typeof(null)`,
+* `T*` is a shorthand for `T*‼?` aka. `T*‼ + typeof(null)`,
+* `R function(…) …` is a shorthand for `R function‼(…) …?` aka. `R function‼(…) … + typeof(null)`,
+* `R delegate(…) …` is a shorthand for `R delegate‼(…) …?` aka. `R delegate‼(…) … + typeof(null)`,
+* `T[K]` is a shorthand for `T[K]‼?` aka. `T[K]‼ + typeof(null)`,
 
 where
 * `C‼` represents the newly added core-language type of non-null `C` references,
@@ -180,6 +180,7 @@ The return type is <code>typeof((cast(T<sub>1</sub>)expr).member{(…)}) + … +
 Because plus types that include `void` are `void`,
 if any of the member accesses returns `void`,
 the whole expression returns `void`.
+It is also `void` if there is no common type of those expressions.
 
 If the type of `expr` includes `typeof(null)`,
 in the non-UFCS case member access can never succeed,
@@ -221,7 +222,8 @@ The return type is therefore `typeof((cast(typeof(expr)!)expr)(…))?`.
 Basically the same as calls, except that the plus type be composed of
 array, slice, and aggregate types with indexing/slicing operators.
 
-Also, there will be `expr?[…]` which performs a null check and 
+Also, there will be `expr?[…]` which performs a null check and return `null` for `null`,
+and lowers to an indexing expression of the active option otherwise.
 
 #### Elvis Operator
 
@@ -418,7 +420,7 @@ To indicate that an invalid pattern exists and ought to be used to model optiona
 one writes `enum null = ...;` into the struct.
 Similar to `init` (which is automatically defined), `enum null` defines `enum typeof(this) __null`,
 which for a plus type that includes exactly `T` and `typeof(null)`
-it is guaranteed that the size of `T?` is the same as `T`
+guarantees that the size of `T?` is the same as `T`
 and that `T.__null` will be used to mark the `null` value of the plus type.
 Null checks are then `obj is T.__null`.
 
@@ -437,6 +439,14 @@ struct index_t
     enum null = Index(size_t.max);
 }
 ```
+
+In `@system` code, the cast to non-null is then a no-op.
+The unchecked cast from such a possibly `null` type to `typeof(null)`
+may be performed simply subtracting or `xor`-ing the `__null` bit pattern,
+as the programmer takes responsibility that the object is indeed `null`
+and therefore must have the bit pattern.
+
+The null check effectively becomes a mere `is` comparison against `T.__null`.
 
 ### Discriminated Union Types
 
@@ -979,3 +989,104 @@ Licensed under [Creative Commons Zero 1.0](https://creativecommons.org/publicdom
 
 ## History
 The DIP Manager will supplement this section with links to forum discsusionss and a summary of the formal assessment.
+
+```
+EnumUnion is here for you
+
+### Synopsis
+```d
+import enumunion;
+
+struct EU
+{
+    mixin EnumUnion!(["x", "s", "y"], int, string, int);
+    // your favorite members, except:
+    //   - no constructors
+    //   - no destructor
+    //   - no data members
+}
+
+void main()
+{
+    auto eu = EU(x: 1);
+    assert(eu.index == 0);
+    assert(eu.x == 1);
+    int n = 10;
+    eu.match!(
+        (long x) => writeln("x: ", x),
+        s => f(s),
+        y => n
+    );
+}
+```
+
+### FAQ
+
+Q: Is it defensive?
+A: Yes. If you use it incorrectly, problems are diagnosed.
+
+Q: What members does it add?
+A: Practically, it only adds `@property` accessors of the names you give it. Those check if the member is active.
+Everything else it adds has two initial underscores, so there should be no name clashes with stuff you add to your type.
+
+Q: Okay, but what does it add?
+A: Here you go:
+- The `alias __Types` and the `enum __names` to quickly access the construction.
+- An alias `__Index`, the smallest unsigned type large enough to contain the index, given the number of members. In practice, it will be ubyte.
+- A data member `__index` of type `__Index`.
+- An unnamed union of the types and doubly underscored data member names you passed.
+- The aforementioned `@property` accessors.
+- An Enum type `__$(name)_t` for each option.
+- Two constructors for each data member name (one with a `ref` parameter for copy and one without for move construction). It must be called using named argument notation using your data member name.
+- A destructor if any of the members has a destructor.
+- Some other `__` compile-time stuff to keep track of correct usage.
+
+Q: Why the enum types?
+A: To disambiguate constructors if two data members have the same type: `this(int x)` and `this(int y)` would not be different otherwise.
+
+Q: Assuming data member `x` has a unique type, do I need to specify `x:` in the constructor?
+A: Yes, intentionally so. The constructors take the uniquely typed and defaulted enum parameter as their first parameter. By using named arguments, you technically provide the second parameter first, and the remaining parameter has a default value, so you’re good to go. If you do not specify the parameter name, the argument would be bound to the first argument, which is of enum type, and overload resolution fails.
+
+Q: How does `eu.index` work? Wouldn’t it have to be `eu1.__index`?
+A: That’s because `index` is not a member function, but a UFCS call. That allows you to name an option `index` without internal stuff breaking. However, then `eu.index` accesses the option and you _must_ use `index(eu)` then to get the index, or `eu.__index`. Reading `__index` is safe.
+
+Q: Can I assign through the `@property` accessors?
+A: Yes, and it sets the internal index appropriately; i.e. to set an option, the option need not be active, but becomes active. Although the get accessors return by `ref`, normal-looking assignment uses the set accessor; if you need to, you can use `(ref () => eu.x)() = rhs` to assert that `x` is active and then set it directly.
+
+Q: Is it `@safe`?
+A: It’s not completely fool-proof. I don’t think it can be, honestly. The loophole is that the property accessors return my `ref`. They have to, otherwise two undesirable things happen: Accessing copies, which throws a wrench into non-copyable types and is potentially a performance hit. Worse, mutable objects cannot be mutated: You couldn’t do `++eu.x`, `eu.x.setFatal()` or something similar. This means you can store the address of an option in a pointer variable. While not inherently unsafe, if you change the active option, in general, dereferencing the pointer is now unsafe.
+
+Q: Is `match` a module-level function called by UFCS as well?
+A: Exactly.
+
+Q: What if I don’t need to handle all options? Is there some kind of default case?
+A: Use `matchDefault`; its last template argument is considered a default case that is applied to every option that is not covered by others, therefore its parameter’s name is irrelevat. It needs one parameter, though, even if you ignore it.
+
+Q: How do I use them?
+A: For `match`, you put in one handler of the form `option => expr(option)` for each option.
+
+Q: Can a handler take the option by `ref` or `auto ref`?
+A: Yes for `ref` and no for `auto ref`.
+
+Q: How does it know what handler handles which option.
+A: Names. You must provide handlers taking parameters with exaclty the same name as the options. To aid with this, the handlers must be function pointers or delegates and their parameter name must be equal to the option name. The only exception to this is the last handler on `matchDefault` which acts as a default handler; it still needs a parameter, which you’ll probably ignore most of the time.
+
+Q: Do the handlers’ parameter types need to match exactly as well?
+A: They don’t. A handler must be callable with the option, but if you write a handler for an option `x` that – for some reason – may be any signed integer type, you can just use `(long x) => expr(x)` for the handler; of course, `x` is then a `long` in any case.
+
+Q: So, I can’t use functions or functors (object with `opCall`) for handling?
+A: Not directly, but for a function `f`, just use `x => f(x)` or `x => x.f`; for a functor `f`, only `x => f(x)` works.
+
+Q: But I can pass a function pointer or delegate directly?
+A: Yes, but just because you _can,_ doesn’t mean you _should._
+
+Q: Does it work with `@safe`, `pure`, `nothrow`, and `@nogc`?
+A: Yes. As for DIP1000, it seems to work, but I haven’t figured out if there’s a bug regarding `scope` destructors. If your types don’t have destructors, you can definitely use it.
+
+Q: Can I do something like algebraic data types with it?
+A: No, that’s not intended.
+
+Q: What are `matchOrdered` and `matchOrderedDefault` about?
+A: They require that handlers be in the same order as the options. This reduces template bloat and compilation time, and it gives better diagnostics.
+
+```
