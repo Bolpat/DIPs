@@ -57,7 +57,8 @@ Also, like type constructors, having the same one twice does not change the type
 A value is extracted from a plus type by referring to an option by type.
 
 Plus types auto-inline with other plus types:
-`(int + string) + Object` is the same as `int + (string + Object)`.
+`(int + string) + Object` is the same as `int + (string + Object)`,
+that is, the 3-ary plus type `int + string + Object`.
 That gives rise to the analogy with associativity of the arithmetic addition.
 
 The empty plus type is the bottom type `noreturn`
@@ -66,10 +67,10 @@ and adding the bottom type to a plus type doesn’t change it.
 A plus type that includes `void` is `void`.
 
 > [!TIP]
-> The type `noreturn` is the neutral element of plus types.
+> The type `noreturn` is the neutral element of the plus type constructor.
 > The type `int + noreturn` is not *like* `int`, it is exactly `int`.
 >
-> The type `void` is the absorbing element of plus types.
+> The type `void` is the absorbing element of the plus type constructor.
 > The type `int + void` is exactly `void`.
 
 For an easy way to form a plus type form the types of a compile-time sequence of types (aka. a type tuple),
@@ -99,8 +100,8 @@ Because plus types commute and associate,
 `int? + string` is the same as `int + string?` and `(int + string)?`.
 Also, `typeof(null)?` is `typeof(null)`.
 
-> [!IMPORTANT]
-> Implementations are encouraged to use the notation
+> [!NOTE]
+> For diagnostics, implementations are encouraged to use the notation
 > <code>(T<sub>1</sub> + … + T<sub>*n*</sub>)?</code>
 > for plus types that include `typeof(null)` and two or more types.
 
@@ -153,6 +154,13 @@ Only two types have special treatment with regards to their negative:
 * For the bottom type, `-noreturn` is `noreturn`.
 * For the `void` type, `-void` is `void`.
 
+Of course, the negative of a negative type is the type again:
+`-(-T)` is `T` for every type `T`.
+
+Also, negative trickles down a plus type:
+<code>-(T<sub>0</sub> + … + T<sub>*n>−1</sub>)</code> is exactly
+<code>(-T<sub>0</sub>) + … + (-T<sub>*n>−1</sub>)</code>.
+
 The most important application of negative types is `-typeof(null)`,
 as adding it to nullable types removes the nullability.
 Because that should be easy,
@@ -171,7 +179,7 @@ While possible, the purpose of `!` is not to be applied to non-nullable types.
 
 > [!CAUTION]
 > Because of negative types and because every type is idempotent on a plus type,
-> Order of definition can make a difference.
+> parentheses and the steps in which a plus type is built iteratively can make a difference.
 > A plus type expression <code>T<sub>1</sub> + T<sub>2</sub> + … + T<sub>*n*</sub></code> cannot be parsed iteratively
 > as <code>T<sub>1</sub> + (T<sub>2</sub> + … + T<sub>*n*</sub>)</code>:
 >
@@ -193,7 +201,7 @@ due to how those types are going to be used in practice.
 To get non-nullable types backwards compatible into the language,
 we add `‼` types.
 
-For class (or interface) types `C`,
+For class or interface types `C`,
 pointer types `T*`,
 function pointer types `R function(…) …`,
 deletate types `R delegate(…) …`,
