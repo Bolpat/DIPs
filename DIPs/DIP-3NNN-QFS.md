@@ -3,7 +3,7 @@
 | Field           | Value                                                           |
 |-----------------|-----------------------------------------------------------------|
 | DIP:            | (number/id -- assigned by DIP Manager)                          |
-| Author:         | (your name and contact email address)                           |
+| Author:         | Quirin F. Schroll (@Bolpat)                                     |
 | Implementation: | (links to implementation PR if any)                             |
 | Status:         | Draft                                                           |
 
@@ -11,7 +11,7 @@
 
 Adds various kinds of sum types to the language.
 This enables nullability checks and discriminated unions.
-
+Nullable/optional types naturally fall out of this.
 
 ## Contents
 * [Rationale](#rationale)
@@ -38,8 +38,8 @@ The most basic case is a function that may return two kinds of otherwise unrelat
 e.g. an `int` or a `string`.
 The two possible result types have no particular order.
 
-This leads to the type *n*-ary constructor `+`:
-For *n* types <code>T<sub>0</sub></code>, …, <code>T*<sub>*n*−1</sub></code>,
+This leads to the type *n*-ary type constructor `+`:
+For *n* types <code>T<sub>0</sub></code>, …, <code>T<sub>*n*−1</sub></code>,
 <code>T<sub>0</sub> + … + T<sub>*n*−1</sub></code>
 forms a *plus type.*
 It’s called that because like the arithmetic addition,
@@ -47,40 +47,64 @@ the types commute and are associative.
 The types have no order,
 similar to how type constructors have no order
 and therefore `const shared int` and `shared const int`  are the same type.
-Also, like type constructors, having the same entity twice does not change the type:
+Also, like type constructors, having the same one twice does not change the type:
 `int + int` is `int` the same way `const(const int)` is `const int`.
 
-A value is extracted from a plus type by referring to a component by type.
+> [!TIP]
+> To be clear, `int + int` is not a type *like* `int`, it’s exactly `int`.
+> Adding a type is idempotent.
+
+A value is extracted from a plus type by referring to an option by type.
 
 Plus types auto-inline with other plus types:
 `(int + string) + Object` is the same as `int + (string + Object)`.
-Therefore the analogy with associativity of the arithmetic addition.
+That gives rise to the analogy with associativity of the arithmetic addition.
 
 The empty plus type is the bottom type `noreturn`
 and adding the bottom type to a plus type doesn’t change it.
 
 A plus type that includes `void` is `void`.
 
-An easy way to form a plus type form the types of a compile-time sequence of types (aka. a type tuple),
-simply add the type tuple `Ts` with `noreturn`.
-In general, when a type tuple is connected with `+` to another type or type tuple,
-all the types are connected to a plus type containing them.
-Therefore, adding `noreturn` forms a plus type that,
-unless the type tuple was empty,
-does not contain `noreturn` as the bottom type is being removed.
+> [!TIP]
+> The type `noreturn` is the neutral element of plus types.
+> The type `int + noreturn` is not *like* `int`, it is exactly `int`.
+>
+> The type `void` is the absorbing element of plus types.
+> The type `int + void` is exactly `void`.
 
-Similar to how alias reassignment works,
+For an easy way to form a plus type form the types of a compile-time sequence of types (aka. a type tuple),
+introduce the unary prefix type constructor `+`:
+For a compile-time sequence of types `Ts`, the type `+Ts` is the sum type consisting of the types in `Ts`.
+
+Also, when a type tuple is connected with `+` to another type or type tuple,
+all the types are connected to a plus type containing them.
+
+At places where alias reassignment works,
 a plus type can have a type added using `PlusType += Type`.
-That is the same as `PlusType = PlusType + Type`
-because of commutativity and associativity.
+That is the same as `PlusType = PlusType + Type`,
+but only due to commutativity and associativity of plus types.
+
+### Plus `typeof(null)`
 
 There is one type in particular that is going to be added to an existing type a lot: `typeof(null)`.
 Because of that, we introduce the type suffix `?` so that `T?` means `T + typeof(null)`.
 Therefore, `int?` is a nullable `int`.
 
+> [!TIP]
+> An object of type `int?` can hold two possible types values:
+> * Values of type `int`
+> * Values of type `typeof(null)`, which are always `null`.
+
 Because plus types commute and associate,
 `int? + string` is the same as `int + string?` and `(int + string)?`.
 Also, `typeof(null)?` is `typeof(null)`.
+
+> [!IMPORTANT]
+> Implementations are encouraged to use the notation
+> <code>(T<sub>1</sub> + … + T<sub>*n*</sub>)?</code>
+> for plus types that include `typeof(null)` and two or more types.
+
+### Conversions
 
 A plus type `L` implicitly converts to another plus type `R` if
 * either all types of `L` are also in `R`,
@@ -108,16 +132,29 @@ Only if the cast requires checks will it throw an `AssertError` if the run-time 
 
 ### Negative Types
 
-A negative type is a type with the only purpose to interact with associative sum types.
-It has no values, which means it cannot be realized in code execution, but it’s not the bottom type.
+A negative type is a type with the only purpose to interact with sum types.
+It has no values, which means it cannot be realized in code execution,
+but it’s not the bottom type.
 
 A negative type `-T` adds (cf. plus type) with `T` to the bottom type.
 Its only purpose is to remove a type from a plus type.
 
-The type `int + string + (-int)` is the same as `string`.
+> [!TIP]
+> Plus types and negative types are best viewed not like adding integers,
+> where two different integers such as 2 and 3 add to a basic integer such as 5,
+> but rather like variables add in algebra:
+> If we know nothing else, *a* and *b* add to *a* + *b,*
+> but *a* and −*a* add to the neutral element of addition.
+>
+> Therefore, the type `int + string + (-int)` not *like* `string`,
+> it is `string`.
 
-The most important application of negative types is `-typeof(null)`.
-Adding it to nullable types removes the nullability.
+Only two types have special treatment with regards to their negative:
+* For the bottom type, `-noreturn` is `noreturn`.
+* For the `void` type, `-void` is `void`.
+
+The most important application of negative types is `-typeof(null)`,
+as adding it to nullable types removes the nullability.
 Because that should be easy,
 as for adding `typeof(null)` using `?`,
 we add a type suffix for adding `-typeof(null)` to a plus type: `!`.
@@ -127,8 +164,34 @@ This is only useful if `T` already is a plus type that includes `typeof(null)`.
 and the declaration of a variable of this type leads to a compile error.)
 While possible, the purpose of `!` is not to be applied to non-nullable types.
 
+> [!NOTE]
+> Alternatively, `!` could be defined so that it removes `typeof(null)`
+> when it’s present, but not actually add `-typeof(null)`.
+> That way, `int!` is `int`, but `int?!` isn’t `int?`, but `int`.
+
+> [!CAUTION]
+> Because of negative types and because every type is idempotent on a plus type,
+> Order of definition can make a difference.
+> A plus type expression <code>T<sub>1</sub> + T<sub>2</sub> + … + T<sub>*n*</sub></code> cannot be parsed iteratively
+> as <code>T<sub>1</sub> + (T<sub>2</sub> + … + T<sub>*n*</sub>)</code>:
+>
+> E.g., `int + string + (-int) + (-int)` is `string`,
+> because de-duplication is done *first*,
+> i.e. it is transforemd to `int + string + (-int)`
+> and *then* negatives annihilate.
+>
+> Parentheses change order of evaluation:
+> E.g., `(int + string + (-int)) + (-int)` is `string + (-int)`,
+> as `(int + string + (-int))` is `string` and that is then added to `-int`.
+
+This behavior is unfortunate,
+but the author expects this to be largely irrelevent
+due to how those types are going to be used in practice.
+
+### Non-nullable Core-langue Reference Types
+
 To get non-nullable types backwards compatible into the language,
-we add `!` types.
+we add `‼` types.
 
 For class (or interface) types `C`,
 pointer types `T*`,
@@ -154,12 +217,30 @@ which is why this document uses a non-ASCII character,
 however they are easily expressible indirectly using the `!` suffix:
 `T*!` expands to `T*‼ + typeof(null) + (-typeof(null))` which is `T*‼`.
 
+### Nullable Slices
+
 Notably absent from this list are slices.
 While slices can be `null`, they do not conceptually include `typeof(null)`;
-rahter, an uninitialized slice is much more like an empty slice.
-This also means that `T[]?` is different from `T[]` and has a very distinguished `null` value.
+rahter, an uninitialized slice is very similar to an empty slice,
+and in practice, is used as if it were any other empty slice.
+Conceptually, `T[]` is already a non-nullable type.
 
-### Optional types
+This also means that `T[]?` is different from `T[]`
+and has a meaningful `null` value,
+but for efficiency, this DIP proposes to re-use the `null` state of `T[]` for `T[]?`;
+the difference between `T[]` and `T[]?` would be that
+`null` objects of `T[]` are conceptually empty slices,
+whereas `null` objects of `T[]?` are conceptually empty optionals
+and as such, are conceptually different from empty slices.
+In particular, a function returning `T[]`, conceptually, returns slices,
+and if such a slice is empty, its pointer may be `null`;
+on the other hand, a function returning `T[]?`, conceptually, returns
+`null` or a meaningful slice (which may still be empty, but non-`null`).
+The type system informs the user of such functions whether the a `null`
+return value is meaningfully different from an empty slice
+and should be taken care of separately.
+
+### Plus Types and Optional Types
 
 A plus type that includes `typeof(null)` is an *optional type*:
 It has one distinguished value that represents a lack of data.
@@ -316,7 +397,7 @@ if (cond)
     throw ...; // or
     assert(0);
 }
-... effectively-else-branch ...
+// ... effectively-else-branch ...
 ```
 This is because control flow cannot exit the then-branch.
 This can be made explicit at the cost of adding `else`, braces and indentation.
@@ -403,8 +484,8 @@ This is so `cast(!null)nb` for `nb` a `bool?` can be an lvalue.
 ### Invalid Pattern Types
 
 For built-in types `T`, there are four cases of how `T?` is created:
-* If `T` is a core-language reference type, then `T?` is `T`
-* If `T` is `X!` with `X` a core-language reference type, `T?` is `X`.
+* If `T` is a core-language reference type, then `T?` is `T` (the `typeof(null)` added by `?` is redundant)
+* If `T` is `S!` with `S` a core-language reference type, `T?` is `T`.
 * If `T` is `bool`, `T?` is `bool?` with the special handling above.
 * If `T` is some other fundamental type, `T?` is effectively a tuple of `T` and a `bool`,
 where the `bool` is `true` if the `T` component is meaningful.
@@ -456,7 +537,7 @@ The constituent types behave like elements of an array or tuple:
 The order matters and duplicates are meaningful.
 
 This leads to the type *n*-ary constructor `~`:
-For *n* types *T*<sub>0</sub>, …, *T*<sub>*n*−1</sub>,
+For *n* types <code>T<sub>0</sub></code>, …, <code>T<sub>*n*−1</sub></code>,
 <code>(T<sub>0</sub> ~ … ~ T<sub>*n*−1</sub>)</code>
 forms a *discriminated union type.*
 
@@ -938,7 +1019,7 @@ The declaration
 ```d
 enum union EU
 {
-    // data members
+    // data members with names `names` and types `Ts`
     // other members
 }
 ```
@@ -946,7 +1027,8 @@ becomes
 ```d
 struct EU
 {
-    mixin __enum_union!([names...], Ts...);
+    mixin EnumUnion!([names...], Ts...);
+    // other memebers
 }
 ```
 
@@ -1036,7 +1118,7 @@ A: Here you go:
 - A data member `__index` of type `__Index`.
 - An unnamed union of the types and doubly underscored data member names you passed.
 - The aforementioned `@property` accessors.
-- An Enum type `__$(name)_t` for each option.
+- An enum type `__$(name)_t` for each option.
 - Two constructors for each data member name (one with a `ref` parameter for copy and one without for move construction). It must be called using named argument notation using your data member name.
 - A destructor if any of the members has a destructor.
 - Some other `__` compile-time stuff to keep track of correct usage.
@@ -1088,5 +1170,3 @@ A: No, that’s not intended.
 
 Q: What are `matchOrdered` and `matchOrderedDefault` about?
 A: They require that handlers be in the same order as the options. This reduces template bloat and compilation time, and it gives better diagnostics.
-
-```
