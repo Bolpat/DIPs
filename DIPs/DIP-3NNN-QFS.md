@@ -75,7 +75,54 @@ A plus type that includes `void` is `void`.
 
 For an easy way to form a plus type form the types of a compile-time sequence of types (aka. a type tuple),
 introduce the unary prefix type constructor `+`:
-For a compile-time sequence of types `Ts`, the type `+Ts` is the sum type consisting of the types in `Ts`.
+For a compile-time sequence of types `Ts`,
+the type `+Ts` is the sum type consisting of the types in `Ts`.
+
+Type inference is supposed to work with the unary `+` type constructor:
+```d
+R func1(Ts...)(+Ts plusObject) { … }
+R func2(T1, T2)((T1 + T2) plusObject) { … }
+R func3(T)((T + int) plusObject) { … }
+R func4(Ts...)((int + Ts) plusObject) { … }
+```
+In all cases, the template type parameters should be inferred from an argument’s type,
+given that the argument has an appropriate type:
+
+For `func1`, that is any type.
+A type that’s not (immediately) a plus type is a unary plus type,
+so that `func1(0)` infers `Ts` as `(int)`.
+This is the only transformation that types get.
+
+For `func2`, the argument must be a plus type of exactly two types after applying idempotence, absorption, and neutrality.
+
+For `func3`, the argument must me a plus type of exactly two types,
+and exactly one of them must be `int` or implicitly convertible to `int`.
+If both are not `int`, but equally well implicitly convertible to `int`,
+there is an ambiguity which of them will be `T`:
+E.g. if the argument is of type `short + byte`,
+it’s not clear which of them would be “the one that covers `int`”
+and which “the one that becomes `T`”.
+On the other hand, if the argument is `const(int) + short`,
+clearly `const(int)` converts to `int` better than `short`.
+
+For `func4`, the situation is similar to `func3`.
+Because `Ts` may be empty, calling `func4` with an `int` argument is possible.
+
+> [!TIP]
+> Plus types will not implicitly extend by one or more `noreturn` to reach a higher arity,
+> and will not group some types to reach a lower arity.
+>
+> One could, e.g., assume that, to match an `int` with `int + T`,
+> `T` could be `noreturn`, as `int + noreturn` is `int`.
+>
+> Likewiese, one could assume that `int + T` could infer `T` as `string + Object`
+> because `int + (string + Object)` is `int + string + Object`.
+>
+> However, type parameters that are part of a plus type expression never infer plus types.
+
+> [!NOTE]
+> The order of types in a plus type is implementation defined,
+> and likewise which type parameter becomes which.
 
 Also, when a type tuple is connected with `+` to another type or type tuple,
 all the types are connected to a plus type containing them.
@@ -109,7 +156,7 @@ Also, `typeof(null)?` is `typeof(null)`.
 
 A plus type `L` implicitly converts to another plus type `R` if
 * either all types of `L` are also in `R`,
-* or every types of `L` implicitly converts to a exactly one type in `R` best.
+* or every type of `L` implicitly converts to a exactly one type in `R` best.
 
 A type `L` that is not a plus type is treated as a 1-ary plus type
 if it should be converted to a plus type.
@@ -117,8 +164,8 @@ if it should be converted to a plus type.
 A type `R` that is not a plus type is treated as a 1-ary plus type
 if a plus type should be converted to `R`.
 
-If a plus type `P` has reference-compatible components,
-i.e. there is a type `T` such that the pointer type `T*` could refer to any of the components,
+If a plus type `P` has reference-compatible options,
+i.e. if there is a type `T` such that the pointer type `T*` could refer to any of the components,
 a `P` lvalue implicitly converts to an lvalue of type `T`.
 E.g. the an lvlaue of type `int + immutable int` implicitly converts to an lvalue of type `const int`.
 
@@ -159,7 +206,7 @@ Of course, the negative of a negative type is the type again:
 
 Also, negative trickles down a plus type:
 <code>-(T<sub>0</sub> + … + T<sub>*n>−1</sub>)</code> is exactly
-<code>(-T<sub>0</sub>) + … + (-T<sub>*n>−1</sub>)</code>.
+<code>(-T<sub>0</sub>) + … + (-T<sub>*n*−1</sub>)</code>.
 
 The most important application of negative types is `-typeof(null)`,
 as adding it to nullable types removes the nullability.
@@ -198,8 +245,8 @@ due to how those types are going to be used in practice.
 
 ### Non-nullable Core-langue Reference Types
 
-To get non-nullable types backwards compatible into the language,
-we add `‼` types.
+To get non-nullable types backwards-compatible into the language,
+we add non-nullable core-language reference types (`‼` types for short).
 
 For class or interface types `C`,
 pointer types `T*`,
@@ -248,7 +295,7 @@ The type system informs the user of such functions whether the a `null`
 return value is meaningfully different from an empty slice
 and should be taken care of separately.
 
-### Plus Types and Optional Types
+### Operations on Plus Types
 
 A plus type that includes `typeof(null)` is an *optional type*:
 It has one distinguished value that represents a lack of data.
@@ -487,7 +534,7 @@ The bit pattern representing `cast(bool?)null` is guaranteed to be
 different from `0x00` and `0x01`,
 but otherwise implementation defined.
 
-This is so `cast(!null)nb` for `nb` a `bool?` can be an lvalue.
+This is so `cast(!null)tristate` for `tristate` a `bool?` can be an lvalue.
 
 ### Invalid Pattern Types
 
@@ -661,18 +708,24 @@ int y = x swtich
 This is both the backing construct the above lower to as well as the elaborate way to construct discriminated unions.
 
 An `enum union` type is an enhanced `struct` type using the following `mixin template`:
+
+<details>
+<summary>Show/Hide implementation of `EnumUnion`.</summary>
+
 ```d
 mixin template EnumUnion(string[] names, Ts...)
-    if (1 <= names.length && names.length == Ts.length && Ts.length <= ubyte.max && 
-        !{
-            foreach (name; names)
-                if (name.length >= 2)
-                    return name[0 .. 2] == "__";
-            return false;
-        }()
-    )
+    if (1 <= names.length && names.length == Ts.length)
 {
-    static assert(is(typeof(this) == struct) || is(typeof(this) == class));
+    static assert(
+        is(typeof(this) == struct) || is(typeof(this) == class),
+        "Only `struct` and `class` types can mixin `EnumUnion`"
+    );
+
+    static foreach (name; names)
+    {
+        static assert(name.length > 0, "Every option must have a non-empty name");
+        static assert(name.length == 1 || name[0 .. 2] != "__", "Option names cannot start with double underscore");
+    }
 
     import std.conv : __text = text;
 
@@ -707,22 +760,20 @@ mixin template EnumUnion(string[] names, Ts...)
                 assert(__index == i, errorMessage);
                 return __$(name);
             }
-            $(is(typeof((Ts[i] x) @safe   { import core.lifetime : move; x = move(x); })) ? "@safe"   : "")
             $(is(typeof((Ts[i] x) @nogc   { import core.lifetime : move; x = move(x); })) ? "@nogc"   : "")
             $(is(typeof((Ts[i] x) nothrow { import core.lifetime : move; x = move(x); })) ? "nothrow" : "")
             $(is(typeof((Ts[i] x) pure    { import core.lifetime : move; x = move(x); })) ? "pure"    : "")
-            void $(name)(Ts[i] value) @property
+            void $(name)(Ts[i] value) @property @system
             {
                 import core.lifetime : move;
                 this.__index = i;
                 auto self = (() @trusted => &this.__$(name))();
                 *self = move(value);
             }
-            $(is(typeof((ref Ts[i] x) @safe   { x = x; })) ? "@safe"   : "")
             $(is(typeof((ref Ts[i] x) @nogc   { x = x; })) ? "@nogc"   : "")
             $(is(typeof((ref Ts[i] x) nothrow { x = x; })) ? "nothrow" : "")
             $(is(typeof((ref Ts[i] x) pure    { x = x; })) ? "pure"    : "")
-            void $(name)(return ref Ts[i] value) @property
+            void $(name)(ref Ts[i] value) @property @system
             {
                 this.__index = i;
                 auto self = (() @trusted => &this.__$(name))();
@@ -737,17 +788,18 @@ mixin template EnumUnion(string[] names, Ts...)
             $(is(typeof((Ts[i] x) @nogc   { import core.lifetime : move; Ts[i] y = move(x); })) ? "@nogc"   : "")
             $(is(typeof((Ts[i] x) nothrow { import core.lifetime : move; Ts[i] y = move(x); })) ? "nothrow" : "")
             $(is(typeof((Ts[i] x) pure    { import core.lifetime : move; Ts[i] y = move(x); })) ? "pure"    : "")
-            this(__$(name)_t = __$(name)_t.index, Ts[i] $(name))
+            this(Ts[i] $(name), __$(name)_t = __$(name)_t.index)
             {
                 import core.lifetime : move;
                 this.__index = $(i);
                 this.__$(name) = move($(name));
             }
+
             $(is(typeof((Ts[i] x) @safe   { Ts[i] y = x; })) ? "@safe"   : "")
             $(is(typeof((Ts[i] x) @nogc   { Ts[i] y = x; })) ? "@nogc"   : "")
             $(is(typeof((Ts[i] x) nothrow { Ts[i] y = x; })) ? "nothrow" : "")
             $(is(typeof((Ts[i] x) pure    { Ts[i] y = x; })) ? "pure"    : "")
-            this(__$(name)_t = __$(name)_t.index, ref Ts[i] $(name))
+            this(ref Ts[i] $(name), __$(name)_t = __$(name)_t.index)
             {
                 this.__index = $(i);
                 this.__$(name) = $(name);
@@ -755,10 +807,41 @@ mixin template EnumUnion(string[] names, Ts...)
         }.__text);
     }
 
+    static if (!is(typeof(this) == class) && !is(typeof(this) == interface))
+    void opAssign(ref typeof(this) rhs)
+    {
+        final switch (rhs.__index)
+        {
+            static foreach (i, name; names)
+            {
+                case i:
+                    mixin(iq{$(name) = rhs.$(name);}.__text);
+                    return;
+            }
+        }
+    }
+    static if (!is(typeof(this) == class) && !is(typeof(this) == interface))
+    void opAssign(typeof(this) rhs)
+    {
+        import core.lifetime : move;
+        final switch (rhs.__index)
+        {
+            static foreach (i, name; names)
+            {
+                case i:
+                    if (__ctfe)
+                        mixin(iq{$(name) = rhs.$(name);}.__text);
+                    else
+                        mixin(iq{$(name) = move(rhs.$(name));}.__text);
+                    return;
+            }
+        }
+    }
+
     enum bool __anyDtor = {
         static foreach (alias T; Ts)
         {
-            static if (__traits(hasMember, T, "__dtor"))
+            static if (!is(T == class) && __traits(hasMember, T, "__dtor"))
             {
                 return true;
             }
@@ -770,7 +853,7 @@ mixin template EnumUnion(string[] names, Ts...)
         string result = attr;
         static foreach (i, alias T; Ts)
         {
-            static if (__traits(hasMember, T, "__dtor"))
+            static if (!is(T == class) && __traits(hasMember, T, "__dtor"))
             {
                 static if (!is(typeof(mixin(iq{(T x) $(attr) { x.__dtor; }}.__text))))
                     result = "";
@@ -794,7 +877,7 @@ mixin template EnumUnion(string[] names, Ts...)
                         break;
                     static foreach (i, alias T; Ts)
                     {
-                        static if (__traits(hasMember, T, "__dtor"))
+                        static if (!is(T == class) && __traits(hasMember, T, "__dtor"))
                         {
                             case i:
                                 mixin("__",names[i]).__dtor();
@@ -823,11 +906,18 @@ mixin template EnumUnion(string[] names, Ts...)
     );
     static foreach (i, alias ctor; __traits(getOverloads, typeof(this), "__ctor"))
     {
-        static assert({
-            mixin(iq{alias Expected_$(i) = ref typeof(this) function(__$(names[i/2])_t = __$(names[i/2])_t.index, $(i % 2 != 0 ? "ref" : "") Ts[i/2] $(names[i/2]));}.__text);
-            return is(typeof(&ctor) : mixin("Expected_", i.__text));
-        }(),
-        "you cannot declare custom constructors");
+        static if ({
+            mixin(iq{
+                alias Expected = $(is(typeof(this) == class) || is(typeof(this) == interface) ? "" : "ref") typeof(this) function(
+                    $(i % 2 != 0 ? "ref" : "") Ts[i/2] $(names[i/2]),
+                    __$(names[i/2])_t = __$(names[i/2])_t.index,
+                );
+            }.__text);
+            return !is(typeof(&ctor) : Expected);
+        }())
+        {
+            static assert(0, "you cannot declare custom constructors");
+        }
     }
     static assert(__anyDtor || !__traits(hasMember, typeof(this), "__dtor"),
         "you cannot declare a custom destructor"
@@ -840,6 +930,47 @@ mixin template EnumUnion(string[] names, Ts...)
 @safe pure nothrow @nogc
 EU.__Index index(EU)(scope ref const EU eu) @property => eu.__index;
 EU.__Index index(EU)(scope     const EU eu) @property => eu.__index;
+
+private enum bool anyOptionAssignableFrom(EU, T) = {
+    import std.conv : text;
+    static foreach (name; EU.__names)
+    {{
+        static if (__traits(compiles, (ref EU eu, T value) {
+            mixin(iq{*&(eu.$(name)()) = value;}.text);
+        }))
+        {
+            return true;
+        }
+    }}
+    return false;
+}();
+
+/// Assigns `value` to the currently active option of an enum union.
+/// It is an error if the active option does not support assignment from 
+void assignActiveOption(EU, T)(ref EU eu, auto ref T value)
+    if (anyOptionAssignableFrom!(EU, T))
+{
+    import std.conv : text;
+    final switch (eu.__index)
+    {
+        static foreach (i, name; eu.__names)
+        {
+        case i:
+            static if (__traits(compiles, {
+                mixin(iq{*&(eu.$(name)()) = value;}.text);
+            }))
+            {
+                mixin(iq{*&(eu.$(name)()) = value;}.text);
+                return;
+            }
+            else
+            {
+                static immutable errorMessage = "Active option `" ~ name ~ "` of type `" ~ EU.__Types[i].stringof ~ "` cannot be assigned a value of type `" ~ T.stringof ~ "`";
+                assert(0, errorMessage);
+            }
+        }
+    }
+}
 
 template matchOrdered(fs...)
 {
@@ -1016,6 +1147,8 @@ template matchOrderedDefault(fs...)
 }
 ```
 
+</details>
+
 An `enum union` is split into data members and other members.
 All data members must be simple declarations of the form `Type name`;
 they cannot have default intializers.
@@ -1080,7 +1213,7 @@ Licensed under [Creative Commons Zero 1.0](https://creativecommons.org/publicdom
 ## History
 The DIP Manager will supplement this section with links to forum discsusionss and a summary of the formal assessment.
 
-```
+````
 EnumUnion is here for you
 
 ### Synopsis
@@ -1109,18 +1242,22 @@ void main()
     );
 }
 ```
+````
 
 ### FAQ
 
-Q: Is it defensive?
-A: Yes. If you use it incorrectly, problems are diagnosed.
+<details>
+<summary>Show questions and answers</summary>-
 
-Q: What members does it add?
-A: Practically, it only adds `@property` accessors of the names you give it. Those check if the member is active.
+**Q:** Is it defensive?
+**A:** Yes. If you use it incorrectly, problems are diagnosed.
+
+**Q:** What members does it add?
+**A:** Practically, it only adds `@property` accessors of the names you give it. Those check if the member is active.
 Everything else it adds has two initial underscores, so there should be no name clashes with stuff you add to your type.
 
-Q: Okay, but what does it add?
-A: Here you go:
+**Q:** Okay, but what does it add?
+**A:** Here you go:
 - The `alias __Types` and the `enum __names` to quickly access the construction.
 - An alias `__Index`, the smallest unsigned type large enough to contain the index, given the number of members. In practice, it will be ubyte.
 - A data member `__index` of type `__Index`.
@@ -1131,50 +1268,51 @@ A: Here you go:
 - A destructor if any of the members has a destructor.
 - Some other `__` compile-time stuff to keep track of correct usage.
 
-Q: Why the enum types?
-A: To disambiguate constructors if two data members have the same type: `this(int x)` and `this(int y)` would not be different otherwise.
+**Q:** Why the enum types?
+**A:** To disambiguate constructors if two data members have the same type: `this(int x)` and `this(int y)` would not be different otherwise.
 
-Q: Assuming data member `x` has a unique type, do I need to specify `x:` in the constructor?
-A: Yes, intentionally so. The constructors take the uniquely typed and defaulted enum parameter as their first parameter. By using named arguments, you technically provide the second parameter first, and the remaining parameter has a default value, so you’re good to go. If you do not specify the parameter name, the argument would be bound to the first argument, which is of enum type, and overload resolution fails.
+**Q:** Assuming data member `x` has a unique type, do I need to specify `x:` in the constructor?
+**A:** Yes, intentionally so. The constructors take the uniquely typed and defaulted enum parameter as their first parameter. By using named arguments, you technically provide the second parameter first, and the remaining parameter has a default value, so you’re good to go. If you do not specify the parameter name, the argument would be bound to the first argument, which is of enum type, and overload resolution fails.
 
-Q: How does `eu.index` work? Wouldn’t it have to be `eu1.__index`?
-A: That’s because `index` is not a member function, but a UFCS call. That allows you to name an option `index` without internal stuff breaking. However, then `eu.index` accesses the option and you _must_ use `index(eu)` then to get the index, or `eu.__index`. Reading `__index` is safe.
+**Q:** How does `eu.index` work? Wouldn’t it have to be `eu1.__index`?
+**A:** That’s because `index` is not a member function, but a UFCS call. That allows you to name an option `index` without internal stuff breaking. However, then `eu.index` accesses the option and you _must_ use `index(eu)` then to get the index, or `eu.__index`. Reading `__index` is safe.
 
-Q: Can I assign through the `@property` accessors?
-A: Yes, and it sets the internal index appropriately; i.e. to set an option, the option need not be active, but becomes active. Although the get accessors return by `ref`, normal-looking assignment uses the set accessor; if you need to, you can use `(ref () => eu.x)() = rhs` to assert that `x` is active and then set it directly.
+**Q:** Can I assign through the `@property` accessors?
+**A:** Yes, and it sets the internal index appropriately; i.e. to set an option, the option need not be active, but becomes active. Although the get accessors return by `ref`, normal-looking assignment uses the set accessor; if you need to, you can use `(ref () => eu.x)() = rhs` to assert that `x` is active and then set it directly.
 
-Q: Is it `@safe`?
-A: It’s not completely fool-proof. I don’t think it can be, honestly. The loophole is that the property accessors return my `ref`. They have to, otherwise two undesirable things happen: Accessing copies, which throws a wrench into non-copyable types and is potentially a performance hit. Worse, mutable objects cannot be mutated: You couldn’t do `++eu.x`, `eu.x.setFatal()` or something similar. This means you can store the address of an option in a pointer variable. While not inherently unsafe, if you change the active option, in general, dereferencing the pointer is now unsafe.
+**Q:** Is it `@safe`?
+**A:** It’s not completely fool-proof. I don’t think it can be, honestly. The loophole is that the property accessors return my `ref`. They have to, otherwise two undesirable things happen: Accessing copies, which throws a wrench into non-copyable types and is potentially a performance hit. Worse, mutable objects cannot be mutated: You couldn’t do `++eu.x`, `eu.x.setFatal()` or something similar. This means you can store the address of an option in a pointer variable. While not inherently unsafe, if you change the active option, in general, dereferencing the pointer is now unsafe.
 
-Q: Is `match` a module-level function called by UFCS as well?
-A: Exactly.
+**Q:** Is `match` a module-level function called by UFCS as well?
+**A:** Exactly.
 
-Q: What if I don’t need to handle all options? Is there some kind of default case?
-A: Use `matchDefault`; its last template argument is considered a default case that is applied to every option that is not covered by others, therefore its parameter’s name is irrelevat. It needs one parameter, though, even if you ignore it.
+**Q:** What if I don’t need to handle all options? Is there some kind of default case?
+**A:** Use `matchDefault`; its last template argument is considered a default case that is applied to every option that is not covered by others, therefore its parameter’s name is irrelevat. It needs one parameter, though, even if you ignore it.
 
-Q: How do I use them?
-A: For `match`, you put in one handler of the form `option => expr(option)` for each option.
+**Q:** How do I use them?
+**A:** For `match`, you put in one handler of the form `option => expr(option)` for each option.
 
-Q: Can a handler take the option by `ref` or `auto ref`?
-A: Yes for `ref` and no for `auto ref`.
+**Q:** Can a handler take the option by `ref` or `auto ref`?
+**A:** Yes for `ref` and no for `auto ref`.
 
-Q: How does it know what handler handles which option.
-A: Names. You must provide handlers taking parameters with exaclty the same name as the options. To aid with this, the handlers must be function pointers or delegates and their parameter name must be equal to the option name. The only exception to this is the last handler on `matchDefault` which acts as a default handler; it still needs a parameter, which you’ll probably ignore most of the time.
+**Q:** How does it know what handler handles which option.
+**A:** Names. You must provide handlers taking parameters with exaclty the same name as the options. To aid with this, the handlers must be function pointers or delegates and their parameter name must be equal to the option name. The only exception to this is the last handler on `matchDefault` which acts as a default handler; it still needs a parameter, which you’ll probably ignore most of the time.
 
-Q: Do the handlers’ parameter types need to match exactly as well?
-A: They don’t. A handler must be callable with the option, but if you write a handler for an option `x` that – for some reason – may be any signed integer type, you can just use `(long x) => expr(x)` for the handler; of course, `x` is then a `long` in any case.
+**Q:** Do the handlers’ parameter types need to match exactly as well?
+**A:** They don’t. A handler must be callable with the option, but if you write a handler for an option `x` that – for some reason – may be any signed integer type, you can just use `(long x) => expr(x)` for the handler; of course, `x` is then a `long` in any case.
 
-Q: So, I can’t use functions or functors (object with `opCall`) for handling?
-A: Not directly, but for a function `f`, just use `x => f(x)` or `x => x.f`; for a functor `f`, only `x => f(x)` works.
+**Q:** So, I can’t use functions or functors (object with `opCall`) for handling?
+**A:** Not directly, but for a function `f`, just use `x => f(x)` or `x => x.f`; for a functor `f`, only `x => f(x)` works.
 
-Q: But I can pass a function pointer or delegate directly?
-A: Yes, but just because you _can,_ doesn’t mean you _should._
+**Q:** But I can pass a function pointer or delegate directly?
+**A:** Yes, but just because you _can,_ doesn’t mean you _should._
 
-Q: Does it work with `@safe`, `pure`, `nothrow`, and `@nogc`?
-A: Yes. As for DIP1000, it seems to work, but I haven’t figured out if there’s a bug regarding `scope` destructors. If your types don’t have destructors, you can definitely use it.
+**Q:** Does it work with `@safe`, `pure`, `nothrow`, and `@nogc`?
+**A:** Yes. As for DIP1000, it seems to work, but I haven’t figured out if there’s a bug regarding `scope` destructors. If your types don’t have destructors, you can definitely use it.
 
-Q: Can I do something like algebraic data types with it?
-A: No, that’s not intended.
+**Q:** Can I do something like algebraic data types with it?
+**A:** No, that’s not intended.
 
-Q: What are `matchOrdered` and `matchOrderedDefault` about?
-A: They require that handlers be in the same order as the options. This reduces template bloat and compilation time, and it gives better diagnostics.
+**Q:** What are `matchOrdered` and `matchOrderedDefault` about?
+**A:** They require that handlers be in the same order as the options. This reduces template bloat and compilation time, and it gives better diagnostics.
+</details>
